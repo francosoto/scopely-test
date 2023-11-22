@@ -1,0 +1,68 @@
+version: '3.8'
+services:
+  balancer:
+    image: nginx:latest
+    restart: always
+    ports:
+      - "8083:80"
+    volumes: 
+      - ./.docker/nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - main
+
+  cache:
+    image: redis:6.2-alpine
+    restart: always
+    ports:
+      - '6379:6379'
+    command: redis-server --save 20 1 --loglevel notice
+    volumes: 
+      - cache:/data
+    networks:
+      - main
+
+  db:
+    build: 
+      context: .
+      dockerfile: .docker/Dockerfile.db
+    restart: always
+    environment:
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - '3306:3306'
+    volumes:
+      - my-db:/var/lib/mysql
+    networks:
+      - main
+
+  app:
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile
+    deploy: 
+      mode: replicated
+      replicas: 3
+    env_file: .env
+    image: ${COMPOSE_PROJECT_NAME}:latest
+    entrypoint: sh /app/entrypoint.sh ${ENV}
+    ports:
+      - "8000-8002:8000"
+    networks:
+      - main
+    platform: linux/amd64
+    volumes:
+      - ./app:/app/app
+    working_dir: /app
+
+volumes:
+  my-db:
+    driver: local
+  cache:
+    driver: local
+
+networks:
+  main:
+    name: ${COMPOSE_PROJECT_NAME}-network
